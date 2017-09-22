@@ -60,17 +60,23 @@ int main(int argc, const char **argv) {
 	OSPRenderer renderer = ospNewRenderer("scivis");
 
 	// Create an ambient light, which will be used to compute ambient occlusion
-	OSPLight light = ospNewLight(renderer, "ambient");
-	ospCommit(light);
-	// TODO: Can also place a point, or directional light as desired
-	OSPData lights = ospNewData(1, OSP_LIGHT, &light, 0);
+	OSPLight ambient_light = ospNewLight(renderer, "ambient");
+	ospSet1f(ambient_light, "intensity", 0.5);
+	ospCommit(ambient_light);
+	OSPLight sun_light = ospNewLight(renderer, "distant");
+	ospSetVec3f(sun_light, "direction", (osp::vec3f&)cam_dir);
+	ospSet1f(sun_light, "angularDiameter", 4);
+	ospCommit(sun_light);
+
+	std::vector<OSPLight> lights_list = {ambient_light, sun_light};
+	OSPData lights = ospNewData(lights_list.size(), OSP_LIGHT, lights_list.data(), 0);
 	ospCommit(lights);
 
 	// Setup other renderer params
 	ospSetObject(renderer, "model", model);
 	ospSetObject(renderer, "camera", camera);
 	ospSetObject(renderer, "lights", lights);
-	ospSet1i(renderer, "shadowsEnabled", true);
+	ospSet1i(renderer, "shadowsEnabled", 1);
 	ospSet1f(renderer, "aoSamples", 4);
 	ospSet1f(renderer, "spp", 2);
 	ospCommit(renderer);
@@ -98,7 +104,7 @@ void setup_volume(OSPVolume volume, OSPTransferFunction transfer_fcn, const vec3
 		vec3f(1, 0, 0),
 		vec3f(0.5, 0, 0)
 	};
-	const std::vector<float> opacities = {0.01f, 0.05f, 0.01f};
+	const std::vector<float> opacities = {0.005f, 0.01f, 0.001f};
 	OSPData colors_data = ospNewData(colors.size(), OSP_FLOAT3, colors.data());
 	ospCommit(colors_data);
 	OSPData opacity_data = ospNewData(opacities.size(), OSP_FLOAT, opacities.data());
@@ -157,7 +163,7 @@ void setup_spheres(OSPGeometry spheres, const vec3i &dims) {
 	// Create the sphere geometry that we'll use to represent our particles
 	ospSetData(spheres, "spheres", sphere_data);
 	ospSetData(spheres, "color", color_data);
-	ospSet1f(spheres, "radius", 4);
+	ospSet1f(spheres, "radius", 10);
 	// Tell OSPRay how big each particle is in the spheres array, and where
 	// to find the color id. The offset to the center position of the sphere
 	// defaults to 0.
@@ -172,31 +178,32 @@ void setup_streamlines(OSPGeometry streamlines, const vec3i &dims) {
 	// See: http://www.ospray.org/documentation.html#streamlines
 
 	std::vector<vec3fa> vertices = {
-		vec3fa(2, 0, 0),
-		vec3fa(0, 2, 0),
-		vec3fa(0, 0, 2),
+		vec3fa(0, 0, 0),
+		vec3fa(0, dims.y, dims.z),
+		vec3fa(0, 0, dims.z),
 
-		vec3fa(0, 1, 2),
-		vec3fa(0, 4, 2)
+		vec3fa(dims.x / 2, dims.y, 2),
+		vec3fa(dims.x, dims.y / 2, dims.z)
 	};
 
 	std::vector<vec4f> vertex_colors = {
 		vec4f(1, 0, 0, 1),
 		vec4f(1, 0, 0, 1),
 		vec4f(1, 0, 0, 1),
-		vec4f(0, 0, 1, 1),
-		vec4f(1, 0, 1, 1)
+
+		vec4f(1, 1, 0, 1),
+		vec4f(1, 1, 0, 1)
 	};
 
 	std::vector<int> indices = {
 		0, 1,
-		2
+		3
 	};
 
 	OSPData vertex_data = ospNewData(vertices.size() * sizeof(vec3fa), OSP_FLOAT3A,
 			vertices.data(), 0);
 	ospCommit(vertex_data);
-	OSPData colors_data = ospNewData(vertex_colors.size(), OSP_FLOAT3,
+	OSPData colors_data = ospNewData(vertex_colors.size(), OSP_FLOAT4,
 			vertex_colors.data(), 0);
 	ospCommit(colors_data);
 	OSPData index_data = ospNewData(indices.size(), OSP_INT, indices.data(), 0);
