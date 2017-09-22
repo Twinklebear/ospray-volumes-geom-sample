@@ -1,4 +1,5 @@
 #include <random>
+#include <iostream>
 #include <vector>
 #include <ospray/ospray.h>
 #include <ospray/ospcommon/vec.h>
@@ -192,13 +193,14 @@ void setup_streamlines(OSPGeometry streamlines, const vec3i &dims) {
 	// Connecting streamline segments of different lengths and make a total
 	// of 20 streamlines
 	std::vector<int> indices;
-	std::uniform_int_distribution<int> streamline_length(2, 10);
+	std::uniform_int_distribution<int> streamline_length(2, 8);
 	int next_streamline = 0;
 	for (size_t i = 0; i < 20; ++i) {
 		const int len = streamline_length(rng);
 		for (int j = 0; j < len && next_streamline < vertices.size(); ++j, ++next_streamline) {
 			indices.push_back(next_streamline);
 		}
+		++next_streamline;
 	}
 
 	OSPData vertex_data = ospNewData(vertices.size() * sizeof(vec3fa), OSP_FLOAT3A,
