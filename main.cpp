@@ -1,4 +1,4 @@
-#include <iostream>
+#include <random>
 #include <vector>
 #include <ospray/ospray.h>
 #include <ospray/ospcommon/vec.h>
@@ -78,7 +78,7 @@ int main(int argc, const char **argv) {
 	ospSetObject(renderer, "lights", lights);
 	ospSet1i(renderer, "shadowsEnabled", 1);
 	ospSet1f(renderer, "aoSamples", 4);
-	ospSet1f(renderer, "spp", 2);
+	ospSet1f(renderer, "spp", 4);
 	ospCommit(renderer);
 
 	OSPFrameBuffer framebuffer = ospNewFrameBuffer((osp::vec2i&)img_size,
@@ -104,7 +104,7 @@ void setup_volume(OSPVolume volume, OSPTransferFunction transfer_fcn, const vec3
 		vec3f(1, 0, 0),
 		vec3f(0.5, 0, 0)
 	};
-	const std::vector<float> opacities = {0.005f, 0.01f, 0.001f};
+	const std::vector<float> opacities = {0.001f, 0.025f};
 	OSPData colors_data = ospNewData(colors.size(), OSP_FLOAT3, colors.data());
 	ospCommit(colors_data);
 	OSPData opacity_data = ospNewData(opacities.size(), OSP_FLOAT, opacities.data());
@@ -118,7 +118,7 @@ void setup_volume(OSPVolume volume, OSPTransferFunction transfer_fcn, const vec3
 
 	std::vector<unsigned char> volume_data(dims.x * dims.y * dims.z, 0);
 	for (size_t i = 0; i < volume_data.size(); ++i) {
-		volume_data[i] = i % 255;
+		volume_data[i] = (i / (dims.x * dims.y)) * 255;
 	}
 
 	// TODO: Here you can also enable gradient shading and volume lighting if you'd like
@@ -137,15 +137,14 @@ void setup_spheres(OSPGeometry spheres, const vec3i &dims) {
 	// Each particle is an x,y,z center position + a sphere type id, which
 	// we'll use to apply different colors for the different sphere types.
 	// TODO: Random spheres in the volume dims
-	std::vector<Sphere> sphere_vals = {
-		Sphere(1.0, 0.0, 0.0, 0),
-		Sphere(0.5, 0.5, 0.0, 1),
-		Sphere(0.0, 1.0, 0.0, 0),
-		Sphere(-0.5, 0.5, 0.0, 2),
-		Sphere(-1.0, 0.0, 0.0, 1),
-		Sphere(-0.5, -0.5, 0.0, 2),
-		Sphere(0.0, -1.0, 0.0, 0),
-		Sphere(0.5, -0.5, 0.0, 1)
+	std::vector<Sphere> sphere_vals;
+	std::random_device rd;
+	std::mt19937 rng(rd());
+	std::uniform_real_distribution<float> pos_x(-0.05 * dims.x, 1.05 * dims.x);
+	std::uniform_real_distribution<float> pos_y(-0.05 * dims.y, 1.05 * dims.y);
+	std::uniform_real_distribution<float> pos_z(-0.05 * dims.z, 1.05 * dims.z);
+	for (size_t i = 0; i < 200; ++i) {
+		sphere_vals.push_back(Sphere(pos_x(rng), pos_y(rng), pos_z(rng), i % 3));
 	};
 	std::vector<float> sphere_colors = {
 		1.0, 0.0, 0.0,
@@ -163,7 +162,7 @@ void setup_spheres(OSPGeometry spheres, const vec3i &dims) {
 	// Create the sphere geometry that we'll use to represent our particles
 	ospSetData(spheres, "spheres", sphere_data);
 	ospSetData(spheres, "color", color_data);
-	ospSet1f(spheres, "radius", 10);
+	ospSet1f(spheres, "radius", 5);
 	// Tell OSPRay how big each particle is in the spheres array, and where
 	// to find the color id. The offset to the center position of the sphere
 	// defaults to 0.
@@ -177,28 +176,30 @@ void setup_spheres(OSPGeometry spheres, const vec3i &dims) {
 void setup_streamlines(OSPGeometry streamlines, const vec3i &dims) {
 	// See: http://www.ospray.org/documentation.html#streamlines
 
-	std::vector<vec3fa> vertices = {
-		vec3fa(0, 0, 0),
-		vec3fa(0, dims.y, dims.z),
-		vec3fa(0, 0, dims.z),
+	std::random_device rd;
+	std::mt19937 rng(rd());
+	std::uniform_real_distribution<float> pos_x(-0.05 * dims.x, 1.05 * dims.x);
+	std::uniform_real_distribution<float> pos_y(-0.05 * dims.y, 1.05 * dims.y);
+	std::uniform_real_distribution<float> pos_z(-0.05 * dims.z, 1.05 * dims.z);
+	std::uniform_real_distribution<float> colors(0, 1.0);
 
-		vec3fa(dims.x / 2, dims.y, 2),
-		vec3fa(dims.x, dims.y / 2, dims.z)
+	std::vector<vec3fa> vertices;
+	std::vector<vec4f> vertex_colors;
+	for (size_t i = 0; i < 200; ++i) {
+		vertices.push_back(vec3fa(pos_x(rng), pos_y(rng), pos_z(rng)));
+		vertex_colors.push_back(vec4f(colors(rng), colors(rng), colors(rng), 1.0));
 	};
-
-	std::vector<vec4f> vertex_colors = {
-		vec4f(1, 0, 0, 1),
-		vec4f(1, 0, 0, 1),
-		vec4f(1, 0, 0, 1),
-
-		vec4f(1, 1, 0, 1),
-		vec4f(1, 1, 0, 1)
-	};
-
-	std::vector<int> indices = {
-		0, 1,
-		3
-	};
+	// Connecting streamline segments of different lengths and make a total
+	// of 20 streamlines
+	std::vector<int> indices;
+	std::uniform_int_distribution<int> streamline_length(2, 10);
+	int next_streamline = 0;
+	for (size_t i = 0; i < 20; ++i) {
+		const int len = streamline_length(rng);
+		for (int j = 0; j < len && next_streamline < vertices.size(); ++j, ++next_streamline) {
+			indices.push_back(next_streamline);
+		}
+	}
 
 	OSPData vertex_data = ospNewData(vertices.size() * sizeof(vec3fa), OSP_FLOAT3A,
 			vertices.data(), 0);
@@ -211,7 +212,7 @@ void setup_streamlines(OSPGeometry streamlines, const vec3i &dims) {
 
 	// The radius is the same for all streamlines in the group, so if you want
 	// different ones you should make a separate streamlines geometry
-	ospSet1f(streamlines, "radius", 8);
+	ospSet1f(streamlines, "radius", 2);
 	ospSetData(streamlines, "vertex", vertex_data);
 	ospSetData(streamlines, "vertex.color", colors_data);
 	ospSetData(streamlines, "index", index_data);
