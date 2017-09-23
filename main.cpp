@@ -20,8 +20,8 @@ struct Sphere {
 
 
 void setup_volume(OSPVolume volume, OSPTransferFunction transfer_fcn, const vec3i &volume_dims);
-void setup_spheres(OSPGeometry spheres, const vec3i &dims);
-void setup_streamlines(OSPGeometry streamlines, const vec3i &dims);
+void setup_spheres(OSPGeometry spheres, const vec3i &dims, OSPRenderer renderer);
+void setup_streamlines(OSPGeometry streamlines, const vec3i &dims, OSPRenderer renderer);
 
 int main(int argc, const char **argv) {
 	ospInit(&argc, argv);
@@ -40,16 +40,19 @@ int main(int argc, const char **argv) {
 	ospSetVec3f(camera, "up", (osp::vec3f&)cam_up);
 	ospCommit(camera);
 
+	// Create the renderer we'll use to render the image
+	OSPRenderer renderer = ospNewRenderer("scivis");
+
 	// Setup the a transfer function for the volume
 	OSPTransferFunction transfer_fcn = ospNewTransferFunction("piecewise_linear");
 	OSPVolume volume = ospNewVolume("block_bricked_volume");
 	setup_volume(volume, transfer_fcn, volume_dims);
 
 	OSPGeometry spheres = ospNewGeometry("spheres");
-	setup_spheres(spheres, volume_dims);
+	setup_spheres(spheres, volume_dims, renderer);
 
 	OSPGeometry streamlines = ospNewGeometry("streamlines");
-	setup_streamlines(streamlines, volume_dims);
+	setup_streamlines(streamlines, volume_dims, renderer);
 
 	OSPModel model = ospNewModel();
 	ospAddVolume(model, volume);
@@ -57,19 +60,25 @@ int main(int argc, const char **argv) {
 	ospAddGeometry(model, streamlines);
 	ospCommit(model);
 
-	// Create the renderer we'll use to render the image
-	OSPRenderer renderer = ospNewRenderer("scivis");
-
 	// Create an ambient light, which will be used to compute ambient occlusion
 	OSPLight ambient_light = ospNewLight(renderer, "ambient");
-	ospSet1f(ambient_light, "intensity", 0.5);
+	ospSet1f(ambient_light, "intensity", 0.2);
 	ospCommit(ambient_light);
 	OSPLight sun_light = ospNewLight(renderer, "distant");
-	ospSetVec3f(sun_light, "direction", (osp::vec3f&)cam_dir);
-	ospSet1f(sun_light, "angularDiameter", 4);
+	ospSetVec3f(sun_light, "direction", osp::vec3f{1, 1, -0.5});
+	ospSetVec3f(sun_light, "color", osp::vec3f{1, 1, 0.8});
+	ospSet1f(sun_light, "intensity", 0.8);
+	ospSet1f(sun_light, "angularDiameter", 1);
 	ospCommit(sun_light);
 
-	std::vector<OSPLight> lights_list = {ambient_light, sun_light};
+	OSPLight fill_light = ospNewLight(renderer, "distant");
+	ospSetVec3f(fill_light, "direction", osp::vec3f{0.5, 1, 1.5});
+	ospSetVec3f(fill_light, "color", osp::vec3f{1, 1, 0.8});
+	ospSet1f(fill_light, "intensity", 0.2);
+	ospSet1f(fill_light, "angularDiameter", 8);
+	ospCommit(fill_light);
+
+	std::vector<OSPLight> lights_list = {ambient_light, sun_light, fill_light};
 	OSPData lights = ospNewData(lights_list.size(), OSP_LIGHT, lights_list.data(), 0);
 	ospCommit(lights);
 
@@ -78,8 +87,9 @@ int main(int argc, const char **argv) {
 	ospSetObject(renderer, "camera", camera);
 	ospSetObject(renderer, "lights", lights);
 	ospSet1i(renderer, "shadowsEnabled", 1);
-	ospSet1f(renderer, "aoSamples", 4);
-	ospSet1f(renderer, "spp", 4);
+	ospSet1i(renderer, "aoSamples", 8);
+	ospSet1i(renderer, "spp", 16);
+	ospSetVec4f(renderer, "bgColor", osp::vec4f{0.01, 0.01, 0.01, 1});
 	ospCommit(renderer);
 
 	OSPFrameBuffer framebuffer = ospNewFrameBuffer((osp::vec2i&)img_size,
@@ -105,7 +115,7 @@ void setup_volume(OSPVolume volume, OSPTransferFunction transfer_fcn, const vec3
 		vec3f(1, 0, 0),
 		vec3f(0.5, 0, 0)
 	};
-	const std::vector<float> opacities = {0.001f, 0.025f};
+	const std::vector<float> opacities = {0.001f, 0.0025f};
 	OSPData colors_data = ospNewData(colors.size(), OSP_FLOAT3, colors.data());
 	ospCommit(colors_data);
 	OSPData opacity_data = ospNewData(opacities.size(), OSP_FLOAT, opacities.data());
@@ -132,7 +142,7 @@ void setup_volume(OSPVolume volume, OSPTransferFunction transfer_fcn, const vec3
 	ospSetRegion(volume, volume_data.data(), osp::vec3i{0, 0, 0}, (osp::vec3i&)dims);
 	ospCommit(volume);
 }
-void setup_spheres(OSPGeometry spheres, const vec3i &dims) {
+void setup_spheres(OSPGeometry spheres, const vec3i &dims, OSPRenderer renderer) {
 	// See:http://www.ospray.org/documentation.html#spheres
 	// Setup our particle data as a sphere geometry.
 	// Each particle is an x,y,z center position + a sphere type id, which
@@ -144,7 +154,7 @@ void setup_spheres(OSPGeometry spheres, const vec3i &dims) {
 	std::uniform_real_distribution<float> pos_x(-0.05 * dims.x, 1.05 * dims.x);
 	std::uniform_real_distribution<float> pos_y(-0.05 * dims.y, 1.05 * dims.y);
 	std::uniform_real_distribution<float> pos_z(-0.05 * dims.z, 1.05 * dims.z);
-	for (size_t i = 0; i < 200; ++i) {
+	for (size_t i = 0; i < 2000; ++i) {
 		sphere_vals.push_back(Sphere(pos_x(rng), pos_y(rng), pos_z(rng), i % 3));
 	};
 	std::vector<float> sphere_colors = {
@@ -163,18 +173,25 @@ void setup_spheres(OSPGeometry spheres, const vec3i &dims) {
 	// Create the sphere geometry that we'll use to represent our particles
 	ospSetData(spheres, "spheres", sphere_data);
 	ospSetData(spheres, "color", color_data);
-	ospSet1f(spheres, "radius", 5);
+	ospSet1f(spheres, "radius", 3);
 	// Tell OSPRay how big each particle is in the spheres array, and where
 	// to find the color id. The offset to the center position of the sphere
 	// defaults to 0.
 	ospSet1f(spheres, "bytes_per_sphere", sizeof(Sphere));
 	ospSet1i(spheres, "offset_colorID", 3 * sizeof(float));
 
+	// Set a material for the spheres
+	OSPMaterial mat = ospNewMaterial(renderer, "OBJMaterial");
+	ospSetVec3f(mat, "Ks", osp::vec3f{0.5, 0.5, 0.5});
+	ospSet1f(mat, "Ns", 50.f);
+	ospCommit(mat);
+	ospSetMaterial(spheres, mat);
+
 	// Our sphere data is now finished being setup, so we commit it to tell
 	// OSPRay all the object's parameters are updated.
 	ospCommit(spheres);
 }
-void setup_streamlines(OSPGeometry streamlines, const vec3i &dims) {
+void setup_streamlines(OSPGeometry streamlines, const vec3i &dims, OSPRenderer renderer) {
 	// See: http://www.ospray.org/documentation.html#streamlines
 
 	std::random_device rd;
@@ -193,7 +210,7 @@ void setup_streamlines(OSPGeometry streamlines, const vec3i &dims) {
 	// Connecting streamline segments of different lengths and make a total
 	// of 20 streamlines
 	std::vector<int> indices;
-	std::uniform_int_distribution<int> streamline_length(2, 8);
+	std::uniform_int_distribution<int> streamline_length(1, 5);
 	int next_streamline = 0;
 	for (size_t i = 0; i < 20; ++i) {
 		const int len = streamline_length(rng);
@@ -218,6 +235,14 @@ void setup_streamlines(OSPGeometry streamlines, const vec3i &dims) {
 	ospSetData(streamlines, "vertex", vertex_data);
 	ospSetData(streamlines, "vertex.color", colors_data);
 	ospSetData(streamlines, "index", index_data);
+
+	// Setup a material for the streamlines
+	OSPMaterial mat = ospNewMaterial(renderer, "OBJMaterial");
+	ospSetVec3f(mat, "Ks", osp::vec3f{0.5, 0.5, 0.5});
+	ospSet1f(mat, "Ns", 2.f);
+	ospCommit(mat);
+	ospSetMaterial(streamlines, mat);
+
 	ospCommit(streamlines);
 }
 
