@@ -65,15 +65,15 @@ int main(int argc, const char **argv) {
 	ospSet1f(ambient_light, "intensity", 0.2);
 	ospCommit(ambient_light);
 	OSPLight sun_light = ospNewLight(renderer, "distant");
-	ospSetVec3f(sun_light, "direction", osp::vec3f{1, 1, -0.5});
-	ospSetVec3f(sun_light, "color", osp::vec3f{1, 1, 0.8});
+	ospSetVec3f(sun_light, "direction", osp::vec3f{1.f, 1.f, -0.5f});
+	ospSetVec3f(sun_light, "color", osp::vec3f{1.f, 1.f, 0.8f});
 	ospSet1f(sun_light, "intensity", 0.8);
 	ospSet1f(sun_light, "angularDiameter", 1);
 	ospCommit(sun_light);
 
 	OSPLight fill_light = ospNewLight(renderer, "distant");
-	ospSetVec3f(fill_light, "direction", osp::vec3f{0.5, 1, 1.5});
-	ospSetVec3f(fill_light, "color", osp::vec3f{1, 1, 0.8});
+	ospSetVec3f(fill_light, "direction", osp::vec3f{0.5f, 1.f, 1.5f});
+	ospSetVec3f(fill_light, "color", osp::vec3f{1.f, 1.f, 0.8f});
 	ospSet1f(fill_light, "intensity", 0.2);
 	ospSet1f(fill_light, "angularDiameter", 8);
 	ospCommit(fill_light);
@@ -89,7 +89,7 @@ int main(int argc, const char **argv) {
 	ospSet1i(renderer, "shadowsEnabled", 1);
 	ospSet1i(renderer, "aoSamples", 8);
 	ospSet1i(renderer, "spp", 16);
-	ospSetVec4f(renderer, "bgColor", osp::vec4f{0.01, 0.01, 0.01, 1});
+	ospSetVec4f(renderer, "bgColor", osp::vec4f{0.01f, 0.01f, 0.01f, 1.f});
 	ospCommit(renderer);
 
 	OSPFrameBuffer framebuffer = ospNewFrameBuffer((osp::vec2i&)img_size,
